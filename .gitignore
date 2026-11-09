@@ -218,3 +218,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Hidden files and directories
+.*
+!.gitignore
+!.env.example
