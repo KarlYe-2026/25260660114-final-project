@@ -1,11 +1,11 @@
 {
   "version": 1,
-  "case_id": "4288793659951088",
+  "case_id": "b8e282dd6a4f6f03",
   "asof": "2026-11-04",
   "params": {
     "ma_window_1": 200,
     "ma_window_2": 50,
-    "min_signals_required": 3,
+    "min_signals_required": 2,
     "max_retries": 3,
     "timeout_minutes": 30
   },
@@ -18,25 +18,25 @@
       "artifacts": {
         "data/processed/qqq_daily.csv": "1228d5a766c28e6ee216b157ddc36d0ae94a206c7e08e6b75ab634acec33870e"
       },
-      "finished_at": "2026-11-10T14:03:05+00:00"
+      "finished_at": "2026-11-10T14:11:55+00:00"
     },
     "calculate": {
       "status": "DONE",
       "retries": 0,
       "artifacts": {
-        "output/tables/valuation-asof-2026-11-04.csv": "0b19832ec64417d9f921240ba584c8897460ccb3f709086701150808a2e2d930"
+        "output/tables/valuation-asof-2026-11-04.csv": "679fb52c67ee76eec5c8dcd00a0776c14ec2333e63ca6391b5097e76f6ce310e"
       },
-      "finished_at": "2026-11-10T14:03:07+00:00"
+      "finished_at": "2026-11-10T14:11:56+00:00"
     },
     "checker": {
       "status": "DONE",
       "retries": 0,
       "artifacts": {
-        "output/tables/valuation-asof-2026-11-04.csv": "0b19832ec64417d9f921240ba584c8897460ccb3f709086701150808a2e2d930"
+        "output/tables/valuation-asof-2026-11-04.csv": "679fb52c67ee76eec5c8dcd00a0776c14ec2333e63ca6391b5097e76f6ce310e"
       },
-      "finished_at": "2026-11-10T14:03:08+00:00"
+      "finished_at": "2026-11-10T14:11:57+00:00"
     }
   },
   "error": null,
-  "updated_at": "2026-11-10T14:03:08+00:00"
+  "updated_at": "2026-11-10T14:11:58+00:00"
 }

@@ -1,1 +1,1 @@
-{"ma_window_1": 200, "ma_window_2": 50, "min_signals_required": 3, "max_retries": 3, "timeout_minutes": 30}
+{"ma_window_1": 200, "ma_window_2": 50, "min_signals_required": 2, "max_retries": 3, "timeout_minutes": 30}
