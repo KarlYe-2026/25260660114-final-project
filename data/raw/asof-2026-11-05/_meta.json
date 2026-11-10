@@ -1,0 +1,49 @@
+{
+  "asof": "2026-11-05",
+  "generated_at_utc": "2026-11-10T13:56:49+00:00",
+  "generated_by": "src/fetch_data.py (data-agent);价格原始 CSV 由 generator-lead 经 kimi-datasource MCP 抓数落盘",
+  "anti_leakage": "样本内任何数据日期晚于 asof 即 raise ValueError 阻断(src/fetch_data.py: assert_no_future_dates)",
+  "datasets": {
+    "price": {
+      "symbol": "QQQ",
+      "source": "kimi-datasource 插件 · stock_finance_data(stock_finance_data_get_price)",
+      "note": "ticker QQQ.O,美股 adjust=none 未复权日线,单次最长 3 年窗口;2026-11-10 本机直连 Yahoo Chart API(query1/query2)全部 403、cookie+crumb 亦被封禁,经项目负责人确认改用插件(服务端抓取不受本机出口 IP 限制),探测记录见 docs/notes/data-availability.md",
+      "api": "stock_finance_data_get_price",
+      "params": {
+        "ticker": "QQQ.O",
+        "start_date": "2023-11-07",
+        "end_date": "2026-11-05",
+        "adjust": "none",
+        "interval": "D"
+      },
+      "fetched_at_utc": "2026-11-10T13:56:08Z",
+      "request_id": "1164849c9c3db055415eb72558f02903",
+      "raw_file": "raw_sfd_qqq_price.csv",
+      "fields": {
+        "time": "交易日(插件返回,YYYYMMDD)",
+        "close": "QQQ 当日收盘价(美元,未复权)"
+      }
+    },
+    "pe_ttm": {
+      "symbol": "纳斯达克100(作为 QQQ 的 PE(TTM) 代理)",
+      "source": "蛋卷基金 danjuanfunds.com — /djapi/index_eva/pe_history/NDX?day=all(周度)",
+      "note": "multpl.com Nasdaq-100 PE 页面已下架(404),经项目负责人确认改用蛋卷;周度序列取每月最后一个 <= asof 的观测作为月度值,月度值挂到当月每个交易日;口径为蛋卷计算的 PE-TTM(NDX 指数口径,作为 QQQ 代理),与 multpl 口径存在差异",
+      "raw_file": "raw_danjuan_ndx_pe.json",
+      "request_url": "https://danjuanfunds.com/djapi/index_eva/pe_history/NDX?day=all",
+      "fetched_at_utc": "2026-11-10T13:56:49+00:00",
+      "fields": {
+        "month": "PE 所属月份(月初),YYYY-MM-DD",
+        "pe_ttm": "Nasdaq-100 PE(TTM);该月无数据时为 n/a"
+      }
+    }
+  },
+  "output": {
+    "daily_csv": "data\\processed\\qqq_daily.csv",
+    "columns": [
+      "date",
+      "close",
+      "pe_ttm"
+    ]
+  },
+  "policy": "原始响应原样保存,禁止修改;抓取或解析失败即报错退出,严禁模拟/随机数据"
+}
