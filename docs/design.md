@@ -235,7 +235,24 @@ python src/orchestrate.py --catch-up       # 补跑所有缺失交易日
 python src/orchestrate.py --status         # 打印当前 state.json
 ```
 
-## 7. 与 task.md 的对应关系
+## 7. 防泄露与降级
+
+### 7.1 原始快照全量留档,防泄露校验在加工与计算环节执行
+
+- `data/raw/asof-<日期>/` 是抓数时刻的完整留档,原样保存、禁止修改。数据源返回的原始序列允许包含晚于 asof 的观测——典型如蛋卷 PE 周度序列,抓数时刻必然已含 asof 之后的周度观测。这类记录属于留档的一部分,**不视为违规**:checker 不再据此记"未来数据"issue,也不得为"消除违规"而删改快照。
+- 防泄露闸门设在消费端,共两道,均在聚合/计算之前执行:
+  1. **加工环节**(`src/fetch_data.py`):价格与 PE 序列一律先按 `date <= asof` 截断,PE 截断后才做月度聚合(取每月最后一个 ≤ asof 的观测);`assert_no_future_dates` 断言兜底,触发即 raise,宁可停线不放行。
+  2. **计算环节**(`src/calculate.py`):加载原始快照时同样按 `date <= asof` 截断,截断后才参与均线与 PE 月度聚合。
+- 因此 checker 的防泄露校验对象是**加工产物与计算实际使用的序列**,而非留档本身:
+  - `data/processed/qqq_daily.csv` 不得含晚于 asof 的交易日,其 PE 列须与"截断至 asof 后独立重算"的月度序列逐月一致(不一致即说明有越界观测混入产物);
+  - 计算实际使用的 PE 月度序列不得含晚于 asof 的月份。
+- 仅当 raw 快照中发现晚于 asof 的记录时,checker 须额外静态核实上述两道闸门仍然存在(`tests/checker.py` 的 `find_missing_consumer_gates`);闸门缺失而 raw 有越界记录时,仍按"未来数据"记 issue。
+
+### 7.2 降级规则
+
+PE(TTM) 为 n/a 时,最终信号降级为"两个均线信号同时满足才输出建议关注",并须在估值 CSV 等处明确标注降级原因,严禁静默降级(口径见 task.md §1、§5)。降级是否如实执行由 checker 独立重算复核(检查项 c)。
+
+## 8. 与 task.md 的对应关系
 
 | 设计元素 | task.md 出处 |
 |---------|-------------|

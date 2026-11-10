@@ -1,0 +1,82 @@
+{
+  "issues": [
+    {
+      "id": "pit-001",
+      "asof": "2026-11-06",
+      "category": "未来数据",
+      "severity": "error",
+      "message": "data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json 存在 1 条晚于 asof=2026-11-06 的 PE 观测(最大日期 2026-11-08),涉嫌未来数据",
+      "affected_files": [
+        "D:\\KIMI 代码练习\\aicdemo\\FINAL PROJECT\\25260660114-final-project\\data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json"
+      ],
+      "status": "resolved",
+      "resolution": "raw 按政策保留原样,泄露风险已由消费端闸门覆盖",
+      "resolved_at": "2026-11-10",
+      "verified_gates": [
+        "src/fetch_data.py:112-124 assert_no_future_dates 闸门定义(任何日期晚于 asof 即 raise ValueError)",
+        "src/fetch_data.py:153 价格序列按 <= asof 截断,:157 调用 assert_no_future_dates 断言",
+        "src/fetch_data.py:197 PE 周度序列月度聚合前先按 <= asof 截断,:201-202 取每月最后一个观测,:203 断言月度序列",
+        "src/calculate.py:94 加载价格时按 <= asof 截断",
+        "src/calculate.py:119 加载 PE 时按 <= asof 截断,:123-124 再聚合为月度序列"
+      ],
+      "verified_facts": [
+        "raw PE 快照含 1 条晚于 asof 的观测:2026-11-08(PE 26.9687),系抓数时刻完整留档,按政策不再视为违规",
+        "2026-11 月度 PE 实际取自 2026-11-01 观测 26.9833(最后一个 <= asof 的观测),11-08 观测未进入任何产物",
+        "data/processed/qqq_daily.csv 最大日期 2026-11-06,无晚于 asof 的行;11 月各交易日 pe_ttm=26.9833",
+        "output/tables/valuation-asof-2026-11-06.csv 当前 PE=26.98,与截断后序列一致,产物未受污染"
+      ]
+    },
+    {
+      "id": "pit-002",
+      "asof": "2026-11-06",
+      "category": "未来数据",
+      "severity": "error",
+      "message": "data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json 存在 1 条晚于 asof=2026-11-06 的 PE 观测(最大日期 2026-11-08),涉嫌未来数据",
+      "affected_files": [
+        "D:\\KIMI 代码练习\\aicdemo\\FINAL PROJECT\\25260660114-final-project\\data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json"
+      ],
+      "status": "resolved",
+      "resolution": "raw 按政策保留原样,泄露风险已由消费端闸门覆盖",
+      "resolved_at": "2026-11-10",
+      "verified_gates": [
+        "src/fetch_data.py:112-124 assert_no_future_dates 闸门定义(任何日期晚于 asof 即 raise ValueError)",
+        "src/fetch_data.py:153 价格序列按 <= asof 截断,:157 调用 assert_no_future_dates 断言",
+        "src/fetch_data.py:197 PE 周度序列月度聚合前先按 <= asof 截断,:201-202 取每月最后一个观测,:203 断言月度序列",
+        "src/calculate.py:94 加载价格时按 <= asof 截断",
+        "src/calculate.py:119 加载 PE 时按 <= asof 截断,:123-124 再聚合为月度序列"
+      ],
+      "verified_facts": [
+        "与 pit-001 为同一发现的重复登记;raw PE 快照含 1 条晚于 asof 的观测:2026-11-08(PE 26.9687),系抓数时刻完整留档,按政策不再视为违规",
+        "2026-11 月度 PE 实际取自 2026-11-01 观测 26.9833(最后一个 <= asof 的观测),11-08 观测未进入任何产物",
+        "data/processed/qqq_daily.csv 最大日期 2026-11-06,无晚于 asof 的行;11 月各交易日 pe_ttm=26.9833",
+        "output/tables/valuation-asof-2026-11-06.csv 当前 PE=26.98,与截断后序列一致,产物未受污染"
+      ]
+    },
+    {
+      "id": "pit-003",
+      "asof": "2026-11-06",
+      "category": "未来数据",
+      "severity": "error",
+      "message": "data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json 存在 1 条晚于 asof=2026-11-06 的 PE 观测(最大日期 2026-11-08),涉嫌未来数据",
+      "affected_files": [
+        "D:\\KIMI 代码练习\\aicdemo\\FINAL PROJECT\\25260660114-final-project\\data\\raw\\asof-2026-11-06\\raw_danjuan_ndx_pe.json"
+      ],
+      "status": "resolved",
+      "resolution": "raw 按政策保留原样,泄露风险已由消费端闸门覆盖",
+      "resolved_at": "2026-11-10",
+      "verified_gates": [
+        "src/fetch_data.py:112-124 assert_no_future_dates 闸门定义(任何日期晚于 asof 即 raise ValueError)",
+        "src/fetch_data.py:153 价格序列按 <= asof 截断,:157 调用 assert_no_future_dates 断言",
+        "src/fetch_data.py:197 PE 周度序列月度聚合前先按 <= asof 截断,:201-202 取每月最后一个观测,:203 断言月度序列",
+        "src/calculate.py:94 加载价格时按 <= asof 截断",
+        "src/calculate.py:119 加载 PE 时按 <= asof 截断,:123-124 再聚合为月度序列"
+      ],
+      "verified_facts": [
+        "与 pit-001 为同一发现的重复登记;raw PE 快照含 1 条晚于 asof 的观测:2026-11-08(PE 26.9687),系抓数时刻完整留档,按政策不再视为违规",
+        "2026-11 月度 PE 实际取自 2026-11-01 观测 26.9833(最后一个 <= asof 的观测),11-08 观测未进入任何产物",
+        "data/processed/qqq_daily.csv 最大日期 2026-11-06,无晚于 asof 的行;11 月各交易日 pe_ttm=26.9833",
+        "output/tables/valuation-asof-2026-11-06.csv 当前 PE=26.98,与截断后序列一致,产物未受污染"
+      ]
+    }
+  ]
+}
