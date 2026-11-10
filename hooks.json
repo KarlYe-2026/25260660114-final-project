@@ -1,0 +1,1 @@
+{"hooks": {"PostToolUse": [{"matcher": "*", "hooks": [{"type": "command", "command": "python audit_event.py"}]}]}}
