@@ -223,3 +223,7 @@ __marimo__/
 .*
 !.gitignore
 !.env.example
+!.state/
+
+# Project: disposable files
+temp/
