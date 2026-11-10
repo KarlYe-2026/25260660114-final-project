@@ -1,0 +1,16 @@
+{
+  "api": "stock_finance_data_get_price",
+  "data_source": "kimi-datasource 插件 / stock_finance_data",
+  "params": {
+    "ticker": "QQQ.O",
+    "start_date": "2023-11-07",
+    "end_date": "2026-11-06",
+    "adjust": "none",
+    "interval": "D"
+  },
+  "fetched_at_utc": "2026-11-10T12:30:27Z",
+  "fetch_finished_at_utc": "2026-11-10T12:30:34Z",
+  "fetched_by": "generator-lead 通过 kimi-datasource MCP 工具调用(data-agent 抓数;独立脚本无法直接调用 MCP,故原始响应由 MCP 落盘)",
+  "request_id": "707d0fbaca92569e47a3cba76b7c5f36",
+  "raw_file": "raw_sfd_qqq_price.csv"
+}

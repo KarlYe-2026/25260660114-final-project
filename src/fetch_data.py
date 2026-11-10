@@ -6,19 +6,26 @@
     python src/fetch_data.py --asof 2026-11-06
 
 职责（只做抓取与落盘，不做任何指标计算）:
-    1. 抓取 asof 之前至少 250 个交易日的 QQQ 日线收盘价;
-    2. 抓取 Nasdaq-100 的 PE(TTM) 月度历史(蛋卷基金周度序列,作为 QQQ 的 PE 代理);
+    1. 价格: 读取 data/raw/asof-<日期>/raw_sfd_qqq_price.csv
+       (kimi-datasource 插件 stock_finance_data_get_price 的原始返回)并校验;
+    2. PE: 抓取 Nasdaq-100 的 PE(TTM) 月度历史(蛋卷基金周度序列,作为 QQQ 的 PE 代理);
     3. 防未来数据泄露:任何进入样本的数据日期晚于 asof 即 raise ValueError;
     4. 原始响应原样保存到 data/raw/asof-<日期>/,并写 _meta.json;
     5. 个别日期缺 PE 标 n/a;任何抓取/解析失败直接报错退出,严禁模拟数据。
 
 数据源说明:
-    - 价格: Yahoo Finance 公开图表接口(v8 chart),与 kimi-datasource 的
-      yahoo_finance 源为同一上游;独立脚本无法直接调用 MCP 工具,故用公开端点保证可复现。
-      请求带完整浏览器头(UA/Accept 等),对 403/429 临时限流做指数退避重试。
+    - 价格: kimi-datasource 插件 · stock_finance_data_get_price
+      (ticker QQQ.O, 美股默认/显式 adjust=none 未复权, 单次最长 3 年, 日线)。
+      独立脚本无法直接调用 MCP 工具,故实际请求由 generator-lead 通过 MCP 发起、
+      原始 CSV 落盘 data/raw/,同时写 _fetch_request.json 留档(真实请求参数与时间);
+      本脚本只读取并校验该原始文件,缺失即报错,绝不自行造数。
+      变更原因(2026-11-10 实测): 本机直连 Yahoo Chart API(query1/query2)全部 403,
+      cookie+crumb 流程亦被边缘节点封禁;插件服务端抓取不受本机出口 IP 影响,且
+      未复权口径与 task.md 一致(探测记录见 docs/notes/data-availability.md)。
     - PE(TTM): 蛋卷基金(danjuanfunds.com)纳指100 指数估值 PE 历史(周度序列,
       取每月最后一个观测作为月度值;kimi-datasource 各源均无 PE 历史序列;
       multpl.com 原页面已下架,经项目负责人确认改用蛋卷,见 _meta.json)。
+      PE 采用 NDX 指数口径,作为 QQQ 的代理。
 """
 
 import argparse
@@ -27,25 +34,18 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MIN_TRADING_DAYS = 250
-PRICE_WINDOW_YEARS = 3  # Yahoo 接口区间上限 2 年,故价格窗口取 2 年(>> 250 交易日所需)
-PRICE_WINDOW_DAYS = 730
 
-PRICE_URL = (
-    "https://query1.finance.yahoo.com/v8/finance/chart/QQQ"
-    "?period1={p1}&period2={p2}&interval=1d&events=div%2Csplits"
-)
+PRICE_RAW_FILE = "raw_sfd_qqq_price.csv"
+FETCH_REQ_JSON = "_fetch_request.json"  # 插件抓数的真实请求留档(由 MCP 调用方写入)
 PE_URL = "https://danjuanfunds.com/djapi/index_eva/pe_history/NDX?day=all"
 PE_RAW_FILE = "raw_danjuan_ndx_pe.json"
-
-ET_TZ = ZoneInfo("America/New_York")  # QQQ 交易所时区,日线的归属日期按 ET 判定
 
 RAW_DIR_TMPL = "data/raw/asof-{asof}"
 DAILY_CSV = "data/processed/qqq_daily.csv"
@@ -55,16 +55,13 @@ UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 )
-# 伪装成真实浏览器:Yahoo 对"裸"脚本请求会直接 403/429 拦截
-# (Referer/Origin 等 Yahoo 专属头对 IP 级限流无效,且对非 Yahoo 源不合适,故不加)
 HTTP_HEADERS = {
     "User-Agent": UA,
     "Accept": "application/json, text/plain, */*",
     "Accept-Language": "en-US,en;q=0.9",
 }
-# Yahoo 对触发限流的 IP 返回 403/429(sad-panda 页),属临时封禁,退避重试可自愈;
-# 5xx 为边缘节点临时故障,同样重试;其余状态码(如 404)重试无意义,直接失败。
-HTTP_RETRY_STATUSES = {403, 429, 500, 502, 503, 504}
+# 蛋卷为公开接口:5xx 为边缘节点临时故障,重试;其余状态码(如 404)重试无意义,直接失败。
+HTTP_RETRY_STATUSES = {500, 502, 503, 504}
 HTTP_MAX_ATTEMPTS = 6
 HTTP_RETRY_BASE_DELAY = 15  # 秒;退避序列 15/30/60/120/120,累计约 6 分钟
 
@@ -87,7 +84,7 @@ def http_get(url: str, binary: bool = False):
             if e.code not in HTTP_RETRY_STATUSES or attempt == HTTP_MAX_ATTEMPTS:
                 fail(f"请求失败 {url}: HTTP {e.code} {e.reason}(已重试 {attempt - 1} 次)")
             delay = min(HTTP_RETRY_BASE_DELAY * 2 ** (attempt - 1), 120)
-            print(f"[fetch_data] HTTP {e.code}(疑似临时限流),{delay}s 后重试 "
+            print(f"[fetch_data] HTTP {e.code}(疑似临时故障),{delay}s 后重试 "
                   f"({attempt}/{HTTP_MAX_ATTEMPTS - 1})...")
             time.sleep(delay)
         except urllib.error.URLError as e:
@@ -127,44 +124,44 @@ def assert_no_future_dates(dates: pd.Series, asof: date, what: str) -> None:
         )
 
 
-def fetch_prices(asof: date, raw_dir: Path) -> pd.DataFrame:
-    """抓取 QQQ 日线,返回按日期升序、仅含 asof 及之前数据的 DataFrame。"""
-    start = asof - timedelta(days=PRICE_WINDOW_DAYS)
-    p1 = int(datetime(start.year, start.month, start.day, tzinfo=timezone.utc).timestamp())
-    # period2 为开区间,取 asof 次日 00:00 UTC,保证 asof 当天被包含
-    p2 = int(datetime(asof.year, asof.month, asof.day, tzinfo=timezone.utc).timestamp()) + 86400
-    url = PRICE_URL.format(p1=p1, p2=p2)
-    print(f"[fetch_data] 请求价格: {url}")
+def fetch_prices(asof: date, raw_dir: Path):
+    """读取插件 stock_finance_data 的原始价格 CSV 并校验,返回 (DataFrame, 请求留档 dict)。
 
-    raw_text = http_get(url)
-    (raw_dir / "raw_yahoo_qqq_chart.json").write_text(raw_text, encoding="utf-8")
+    DataFrame 按日期升序、仅含 asof 及之前的 date/close 两列。
+    """
+    req_file = raw_dir / FETCH_REQ_JSON
+    raw_file = raw_dir / PRICE_RAW_FILE
+    if not req_file.exists():
+        fail(f"缺少请求留档 {req_file.relative_to(PROJECT_ROOT)}:价格须先由 MCP 插件抓取"
+             f"(stock_finance_data_get_price, ticker QQQ.O)并落盘原始 CSV 与该留档文件")
+    if not raw_file.exists():
+        fail(f"缺少原始价格文件 {raw_file.relative_to(PROJECT_ROOT)}(请先通过 MCP 插件抓数)")
+    req = json.loads(req_file.read_text(encoding="utf-8"))
 
-    payload = json.loads(raw_text)
-    result = (payload.get("chart") or {}).get("result") or []
-    if not result:
-        fail(f"Yahoo 返回空结果: {str(payload)[:300]}")
-    r = result[0]
-    ts = r.get("timestamp") or []
-    quote = (r.get("indicators", {}).get("quote") or [{}])[0]
-    closes = quote.get("close") or []
-    if not ts or not closes:
-        fail("Yahoo 返回缺少 timestamp/close 字段")
+    df = pd.read_csv(raw_file)
+    for col in ("time", "close", "thscode"):
+        if col not in df.columns:
+            fail(f"{PRICE_RAW_FILE} 缺少字段 {col!r},插件返回格式可能已变化")
+    bad = df[df["thscode"].astype(str) != "QQQ.O"]
+    if len(bad):
+        fail(f"{PRICE_RAW_FILE} 含非 QQQ.O 的行: {len(bad)} 行,请人工核查")
 
-    rows = []
-    for t, c in zip(ts, closes):
-        d = datetime.fromtimestamp(t, tz=ET_TZ).date()  # 日线归属日期按美东时区
-        rows.append((pd.Timestamp(d), c))
-    df = pd.DataFrame(rows, columns=["date", "close"]).dropna(subset=["close"])
+    df["date"] = pd.to_datetime(df["time"].astype(str), format="%Y%m%d")
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df = df.dropna(subset=["close"]).sort_values("date")
+    df = df.drop_duplicates(subset="date", keep="last")
+    df = df[df["date"] <= pd.Timestamp(asof)].reset_index(drop=True)
     if df.empty:
-        fail("收盘价全部为空")
+        fail(f"{PRICE_RAW_FILE} 在 asof={asof} 之前没有可用收盘价")
 
     assert_no_future_dates(df["date"], asof, "QQQ 日线收盘价")
 
     n = len(df)
     if n < MIN_TRADING_DAYS:
         fail(f"asof={asof} 之前仅 {n} 个交易日收盘价,不足 {MIN_TRADING_DAYS} 个")
-    print(f"[fetch_data] 价格 OK: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}, 共 {n} 个交易日")
-    return df.reset_index(drop=True)
+    print(f"[fetch_data] 价格 OK: {df['date'].iloc[0].date()} ~ {df['date'].iloc[-1].date()}, 共 {n} 个交易日"
+          f"(来源 {req.get('data_source')} / {req.get('api')}, 请求于 {req.get('fetched_at_utc')})")
+    return df[["date", "close"]].reset_index(drop=True), req
 
 
 def fetch_pe_history(asof: date, raw_dir: Path) -> pd.DataFrame:
@@ -175,6 +172,7 @@ def fetch_pe_history(asof: date, raw_dir: Path) -> pd.DataFrame:
     """
     print(f"[fetch_data] 请求 PE(TTM) 历史: {PE_URL}")
     raw_text = http_get(PE_URL)
+    fetched_at = datetime.now(timezone.utc)  # 真实请求完成时刻,留档进 _meta.json
     (raw_dir / PE_RAW_FILE).write_text(raw_text, encoding="utf-8")
 
     try:
@@ -204,7 +202,7 @@ def fetch_pe_history(asof: date, raw_dir: Path) -> pd.DataFrame:
     monthly = df.groupby("month", as_index=False)["pe_ttm"].last()
     assert_no_future_dates(monthly["month"], asof, "PE(TTM) 月度序列")
     print(f"[fetch_data] PE(TTM) OK: {monthly['month'].iloc[0].date()} ~ {monthly['month'].iloc[-1].date()}, 共 {len(monthly)} 个月")
-    return monthly[["month", "pe_ttm"]].reset_index(drop=True)
+    return monthly[["month", "pe_ttm"]].reset_index(drop=True), fetched_at
 
 
 def build_daily(price: pd.DataFrame, pe: pd.DataFrame) -> pd.DataFrame:
@@ -219,30 +217,36 @@ def build_daily(price: pd.DataFrame, pe: pd.DataFrame) -> pd.DataFrame:
     return daily[["date", "close", "pe_ttm"]]
 
 
-def write_meta(raw_dir: Path, asof: date, price_url: str, daily_csv: Path) -> None:
+def write_meta(raw_dir: Path, asof: date, price_req: dict,
+               pe_fetched_at: datetime, daily_csv: Path) -> None:
+    iso = lambda d: d.isoformat(timespec="seconds")  # noqa: E731
     meta = {
         "asof": str(asof),
         "generated_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "generated_by": "src/fetch_data.py (data-agent)",
+        "generated_by": "src/fetch_data.py (data-agent);价格原始 CSV 由 generator-lead 经 kimi-datasource MCP 抓数落盘",
         "anti_leakage": "样本内任何数据日期晚于 asof 即 raise ValueError 阻断(src/fetch_data.py: assert_no_future_dates)",
         "datasets": {
             "price": {
                 "symbol": "QQQ",
-                "source": "Yahoo Finance chart API (query1.finance.yahoo.com/v8/finance/chart/QQQ)",
-                "note": "与 kimi-datasource 的 yahoo_finance 同一上游;独立脚本以公开端点复现",
-                "request_url": price_url,
-                "request_window": f"asof 前 {PRICE_WINDOW_DAYS} 自然日(开区间截至 asof 次日)",
-                "raw_file": "raw_yahoo_qqq_chart.json",
+                "source": "kimi-datasource 插件 · stock_finance_data(stock_finance_data_get_price)",
+                "note": "ticker QQQ.O,美股 adjust=none 未复权日线,单次最长 3 年窗口;2026-11-10 本机直连 Yahoo Chart API(query1/query2)全部 403、cookie+crumb 亦被封禁,经项目负责人确认改用插件(服务端抓取不受本机出口 IP 限制),探测记录见 docs/notes/data-availability.md",
+                "api": price_req.get("api"),
+                "params": price_req.get("params"),
+                "fetched_at_utc": price_req.get("fetched_at_utc"),
+                "request_id": price_req.get("request_id"),
+                "raw_file": PRICE_RAW_FILE,
                 "fields": {
-                    "date": "交易日(按 America/New_York 判定归属日期),YYYY-MM-DD",
+                    "time": "交易日(插件返回,YYYYMMDD)",
                     "close": "QQQ 当日收盘价(美元,未复权)",
                 },
             },
             "pe_ttm": {
                 "symbol": "纳斯达克100(作为 QQQ 的 PE(TTM) 代理)",
                 "source": "蛋卷基金 danjuanfunds.com — /djapi/index_eva/pe_history/NDX?day=all(周度)",
-                "note": "multpl.com Nasdaq-100 PE 页面已下架(404),经项目负责人确认改用蛋卷;周度序列取每月最后一个 <= asof 的观测作为月度值,月度值挂到当月每个交易日;口径为蛋卷计算的 PE-TTM,与 multpl 口径存在差异",
+                "note": "multpl.com Nasdaq-100 PE 页面已下架(404),经项目负责人确认改用蛋卷;周度序列取每月最后一个 <= asof 的观测作为月度值,月度值挂到当月每个交易日;口径为蛋卷计算的 PE-TTM(NDX 指数口径,作为 QQQ 代理),与 multpl 口径存在差异",
                 "raw_file": PE_RAW_FILE,
+                "request_url": PE_URL,
+                "fetched_at_utc": iso(pe_fetched_at),
                 "fields": {
                     "month": "PE 所属月份(月初),YYYY-MM-DD",
                     "pe_ttm": "Nasdaq-100 PE(TTM);该月无数据时为 n/a",
@@ -261,7 +265,7 @@ def write_meta(raw_dir: Path, asof: date, price_url: str, daily_csv: Path) -> No
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="抓取 QQQ 收盘价与 PE(TTM) 历史并落盘(data-agent)")
+    ap = argparse.ArgumentParser(description="校验 QQQ 价格原始快照、抓取 PE(TTM) 历史并落盘(data-agent)")
     ap.add_argument("--asof", required=True, help="数据截止日,YYYY-MM-DD(含当天)")
     args = ap.parse_args()
 
@@ -270,20 +274,14 @@ def main() -> None:
     raw_dir.mkdir(parents=True, exist_ok=True)
     print(f"[fetch_data] asof={asof}, 原始数据目录: {raw_dir.relative_to(PROJECT_ROOT)}")
 
-    start = asof - timedelta(days=PRICE_WINDOW_DAYS)
-    price_url = PRICE_URL.format(
-        p1=int(datetime(start.year, start.month, start.day, tzinfo=timezone.utc).timestamp()),
-        p2=int(datetime(asof.year, asof.month, asof.day, tzinfo=timezone.utc).timestamp()) + 86400,
-    )
-
-    price = fetch_prices(asof, raw_dir)
-    pe = fetch_pe_history(asof, raw_dir)
+    price, price_req = fetch_prices(asof, raw_dir)
+    pe, pe_fetched_at = fetch_pe_history(asof, raw_dir)
     daily = build_daily(price, pe)
 
     out_csv = PROJECT_ROOT / DAILY_CSV
     out_csv.parent.mkdir(parents=True, exist_ok=True)
     daily.to_csv(out_csv, index=False)
-    write_meta(raw_dir, asof, price_url, out_csv)
+    write_meta(raw_dir, asof, price_req, pe_fetched_at, out_csv)
 
     print(f"[fetch_data] 完成: {out_csv.relative_to(PROJECT_ROOT)} "
           f"({len(daily)} 行), meta: {(raw_dir / META_JSON).relative_to(PROJECT_ROOT)}")

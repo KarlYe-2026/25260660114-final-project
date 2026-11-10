@@ -52,11 +52,11 @@ n_signals ≥ min_signals_required  → 信号 = "建议关注"
 
 ## 5. 允许的输入与数据来源
 
-- **仅限 kimi-datasource 插件**，严禁引入任何插件外数据源，严禁用随机数、均值填充、前向填充等方式伪造或冒充数据。
-- 价格（主源）：`stock_finance_data`（ticker `QQQ.O`，美股默认不复权），单次请求覆盖 ≥ 250 个交易日，满足 MA200 窗口。
-- 价格（交叉验证源）：`yahoo_finance` 日线。注意其 OHLC 为后复权口径，仅用于交叉验证，不得直接与未复权口径混算（探测记录见 `docs/notes/data-availability.md`）。
-- PE(TTM)：`yahoo_finance` `get_stock_info` 的 `trailingPE`，仅当前快照可得。
-- **历史 PE 序列：** 插件无任何历史 PE 数据源（探测结论见 `docs/notes/data-availability.md`）。历史 PE 中位数由本工作流**每日快照自行累积**：每次运行把当日 PE 追加进 `data/processed/pe_history.csv`，中位数只取 `date ≤ asof` 的快照计算；累积快照数 < `min_pe_history`（默认 60）时，S3 记 n/a 并触发第 1 节降级规则。
+- **价格：kimi-datasource 插件 `stock_finance_data`**（`stock_finance_data_get_price`，ticker `QQQ.O`，显式 `adjust=none` 锁定**未复权**口径，日线，单次最长 3 年窗口，覆盖 ≥ 250 个交易日，满足 MA200 窗口）。原始响应由 MCP 调用落盘 `data/raw/asof-*/`，并附 `_fetch_request.json` 留档真实请求参数与时间；独立脚本（`src/fetch_data.py`）只读取校验该原始文件，缺失即报错。
+- **PE(TTM)：蛋卷基金公开接口**（danjuanfunds.com — /djapi/index_eva/pe_history/NDX?day=all，周度序列）。插件全部数据源均无 PE 历史序列（`sp_data` 不覆盖 ETF、`stock_finance_data` 无估值接口、插件无指数估值源，探测记录见 `docs/notes/data-availability.md`）。**PE 采用 NDX 指数口径，作为 QQQ 的代理**；蛋卷口径与第三方（如 multpl）存在差异。
+- 曾评估的候选源：Yahoo Chart API（query1/query2）2026-11-10 在本机网络全部被 403 封禁（含 cookie+crumb 流程，属边缘节点 IP 级封锁），弃用；插件 `yahoo_finance` 日线为后复权口径，不与未复权价格混算，仅可作交叉验证。
+- 严禁用随机数、均值填充、前向填充等方式伪造或冒充数据。
+- **历史 PE 序列：** 蛋卷周度序列取每月最后一个 ≤ asof 的观测聚合为月度值（口径见 `data/raw/asof-*/_meta.json`），历史 PE 中位数只取 `date ≤ asof` 的月度样本计算；评估月无观测时 PE 记 n/a 并触发第 1 节降级规则。
 - **取不到数据时：** 必须报错停止（状态 `error`）或将对应字段显式标 `n/a` 并按降级/缺失规则处理，绝不允许留空、填 0 或沿用旧值冒充当日值。
 
 ## 6. 信息截止时点
