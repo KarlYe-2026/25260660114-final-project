@@ -86,7 +86,7 @@ scheduled ──► fetching ──► computing ──► validating ──► 
 
 ## 4. Critic
 
-Critic 审查的第一主题是用户指定的两项：**数据来源**与**截止日期**；并覆盖 task.md §6 的缺失处理与前视泄露。分两层实现，互补不替代。
+Critic 审查首先覆盖用户指定的两项——**数据来源**与**截止日期**，以及 task.md §6 的缺失处理与前视泄露。分两层实现，互补不替代。
 
 ### 4.1 Critic-1：确定性硬断言（`src/validate.py`）
 
